@@ -1,0 +1,75 @@
+#!/bin/bash
+
+clear
+echo""
+echo "======= Scrip: Criar LV05 - HOST Netbackup ======="
+read 
+clear
+
+if [ "${USER}" != "adminstransf" ]; then
+	echo "User the user adminstransf for execute" 
+fi
+
+if [ -z $1 ]; then
+	echo "Informe o valor inicial: "
+	exit; 
+fi
+
+#VAR1=$1
+#let VAR2=${VAR1}+9
+#while  [ $CONT -lt $CONT2 ]
+#do
+#CONT=1
+#CONT2=10
+
+HOST=$(cat /home/admintransf/filiais.txt)
+OPENV="/usr/openv"
+FILE="/home/admintransf/uca_openv.txt"
+ERROR="/home/admintransf/uca_openv.err" 
+
+for SRV in ${HOST};
+do
+
+ssh ${SRV} '
+
+		VGS=$(vgs |awk '{print $7}'|tail -1 |cut -c1-2 );
+		LV="LV05";
+		DEV="/dev/mapper/VG00-LV05";
+
+	
+	if [ -d "${OPENV}" ]; then
+		echo "==== ${SRV} NetBackup OK ====" |tee -a >> ${FILE};
+		exit; 
+
+	elif ! [ -d "${OPENV}" ] && [ "${VGS}" -ge "20" ]; then 
+		mkdir -p ${OPENV};
+		vlcreate -n ${LV} -L12G VG00;
+			if [ $? -eq 0 ]; then
+					echo "${LV} criado com sucesso !!"
+			else
+					echo "${SRV} - Erro LVM" >> ${ERROR}
+			fi
+
+		mkfs.ext4 ${DEV} && partprob -s; 
+		mount ${DEV} ${OPENV};			
+		UUID=$(blkid|grep -i lv05|awk '{print $2}');
+		echo '${UUID}   ${OPENV} ext4 defaults 0 0 ' >> /etc/fstab; 
+		systemctl daemon-reload;
+		umount ${OPENV}; 
+		mount -a; 
+			if [ $? -eq 0 ]; then
+					echo "==== ${SRV} Filesystem ${OPENV} OK! ====" >> ${FILE};
+			else
+					echo "==== ${SRV} ${OPENV} NOT OK! ====" >> ${ERROR};
+			fi
+	else
+			echo "==== ${SRV} VGS=${VGS}g verifique espaço ====" >> ${ERROR};
+	fi
+
+			'
+#fim do ssh (')
+
+
+done  
+
+
